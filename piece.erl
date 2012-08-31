@@ -19,14 +19,24 @@
 %% First step: just make the move.
 piece_loop(Maneuver, Location, Team) ->
     receive
-	{ X, Y } when X > 0, X < 9, Y > 0, Y < 9 ->
-            piece_loop(Maneuver, Maneuver(Location, {X, Y}), Team);
+	{ From, X, Y } when X > 0, X < 9, Y > 0, Y < 9 ->
+            piece_loop(Maneuver,
+                       move_response(From, Location, Maneuver(Location, {X, Y})),
+                       Team);
         { From, location } ->
 	    From ! Location,
             piece_loop(Maneuver, Location, Team);
         done ->
             done
     end.
+
+%% @doc Tell the process which asked us to move whether the piece moved.
+move_response(PID, Loc, Loc) ->
+    PID ! { no, Loc },
+    Loc;
+move_response(PID, _, Loc) ->
+    PID ! { yes, Loc },
+    Loc.
 
 	    
 
