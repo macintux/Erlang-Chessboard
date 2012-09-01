@@ -29,11 +29,16 @@ piece_loop(Move, Capture, Location, Team) ->
             piece_loop(Move, Capture,
                        move_response(From, Location, Capture(Location, {X, Y}, Team)),
                        Team);
+        { _, _, _X, _Y } ->
+            throw(invalid_destination);
         { From, location } ->
 	    From ! Location,
             piece_loop(Move, Capture, Location, Team);
         done ->
-            done
+            done;
+        _ ->
+            throw(unknown_message),
+            piece_loop(Move, Capture, Location, Team)
     end.
 
 %% @doc Tell the process which asked us to move whether the piece moved.
@@ -58,6 +63,19 @@ movefuns() ->
                        when abs(NewX - OldX) =:= 1, NewY - OldY =:= 1 -> { NewX, NewY };
                     ({ OldX, OldY }, { NewX, NewY }, black)
                        when abs(NewX - OldX) =:= 1, NewY - OldY =:= -1 -> { NewX, NewY };
+                    (Loc, _, _) -> Loc end
+      },
+
+      { kingmove, fun({ OldX, OldY }, { NewX, NewY }, _)
+                        when abs(NewY - OldY) < 2, abs(NewX - OldX) < 2 -> { NewX, NewY };
                      (Loc, _, _) -> Loc end
+      },
+
+      { knightmove, fun({ OldX, OldY }, { NewX, NewY }, _)
+                          when abs(NewY - OldY) =:= 2, abs(NewX - OldX) =:= 1 -> { NewX, NewY };
+                       ({ OldX, OldY }, { NewX, NewY }, _)
+                          when abs(NewY - OldY) =:= 1, abs(NewX - OldX) =:= 2 -> { NewX, NewY };
+                       (Loc, _, _) -> Loc end
       }
+
     ].
