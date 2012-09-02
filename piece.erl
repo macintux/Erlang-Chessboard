@@ -21,24 +21,23 @@
 %% First step: just make the move.
 piece_loop(Move, Capture, Location, Team) ->
     receive
-	{ From, move, {X, Y} } when X > 0, X < 9, Y > 0, Y < 9 ->
+        { From, move, {X, Y} } when X > 0, X < 9, Y > 0, Y < 9 ->
             piece_loop(Move, Capture,
                        move_response(From, Location, Move(Location, {X, Y}, Team)),
                        Team);
-	{ From, capture, {X, Y} } when X > 0, X < 9, Y > 0, Y < 9 ->
+        { From, capture, {X, Y} } when X > 0, X < 9, Y > 0, Y < 9 ->
             piece_loop(Move, Capture,
                        move_response(From, Location, Capture(Location, {X, Y}, Team)),
                        Team);
         { _, _, {X, Y} } ->
             throw({invalid_destination, {X, Y}});
         { From, location } ->
-	    From ! Location,
+            From ! Location,
             piece_loop(Move, Capture, Location, Team);
         done ->
             done;
-        _ ->
-            throw(unknown_message),
-            piece_loop(Move, Capture, Location, Team)
+        Message ->
+            throw({unknown_message, Message})
     end.
 
 %% @doc Tell the process which asked us to move whether the piece moved.
