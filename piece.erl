@@ -34,6 +34,8 @@ piece_loop(Move, Capture, Location, Team) ->
         { From, location } ->
             From ! Location,
             piece_loop(Move, Capture, Location, Team);
+        { promote, NewMove, NewCapture } ->
+            piece_loop(NewMove, NewCapture, Location, Team);
         done ->
             done;
         Message ->
