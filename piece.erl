@@ -8,35 +8,25 @@
 -module(piece).
 -compile(export_all).
 
-piece_loop(Move, Capture, Location, Team) ->
+piece_loop(Piece, Move, Capture) ->
     receive
-        { From, move, {X, Y} } when X > 0, X < 9, Y > 0, Y < 9 ->
-            piece_loop(Move, Capture,
-                       move_response(From, Location, Move(Location, {X, Y}, Team)),
-                       Team);
-        { From, capture, {X, Y} } when X > 0, X < 9, Y > 0, Y < 9 ->
-            piece_loop(Move, Capture,
-                       move_response(From, Location, Capture(Location, {X, Y}, Team)),
-                       Team);
-        { _, _, {X, Y} } ->
-            throw({invalid_destination, {X, Y}});
-        { From, location } ->
-            From ! Location,
-            piece_loop(Move, Capture, Location, Team);
-        { promote, NewMove, NewCapture } ->
-            piece_loop(NewMove, NewCapture, Location, Team);
+        { Pid, move, Start, End, Team } ->
+            move_response(Pid, Piece, Start, Move(Start, End, Team), End),
+            piece_loop(Piece, Move, Capture);
+        { Pid, capture, Start, End, Team } ->
+            move_response(Pid, Piece, Start, Capture(Start, End, Team), End),
+            piece_loop(Piece, Move, Capture);
         done ->
             done;
         Message ->
             throw({unknown_message, Message})
     end.
 
-move_response(PID, Loc, Loc) ->
-    PID ! { no, Loc },
-    Loc;
-move_response(PID, _, Loc) ->
-    PID ! { yes, Loc },
-    Loc.
+move_response(Pid, Piece, Start, Start, End) ->
+    Pid ! { no, Piece, Start, End };
+move_response(Pid, Piece, Start, End, End) ->
+    Pid ! { yes, Piece, Start, End }.
+
 
 
 movefuns() ->
