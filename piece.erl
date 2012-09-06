@@ -6,6 +6,7 @@
 %%% Created : 30 Aug 2012 by John Daily <jd@epep.us>
 
 -module(piece).
+-include_lib("eunit/include/eunit.hrl").
 -compile(export_all).
 
 piece_loop(Piece, Move, Capture) ->
@@ -44,24 +45,24 @@ next_point({X1, Y1}, {Xf, Yf}) when X1 /= Xf, Y1 /= Yf ->
     B = Y1 - (IntM * X1),
     diag_next_point(IntM, trunc(B), {X1, Y1}, {Xf, Yf}, []);
 next_point({X1, Y1}, {Xf, Yf}) when X1 =:= Xf ->
-    row_next_point(X1, Y1, Yf, []);
+    column_next_point(X1, Y1, Yf, []);
 next_point({X1, Y1}, {Xf, Yf}) when Y1 =:= Yf ->
-    column_next_point(Y1, X1, Xf, []).
+    row_next_point(Y1, X1, Xf, []).
     
 
-row_next_point(_, _Y, _Y, [_H|T]) ->
+column_next_point(_, _Y, _Y, [_H|T]) ->
     lists:reverse(T);
-row_next_point(X, Y1, Yf, Accum) when Y1 > Yf ->
-    row_next_point(X, Y1 - 1, Yf, [{X, Y1 - 1}|Accum]);
-row_next_point(X, Y1, Yf, Accum) when Y1 < Yf ->
-    row_next_point(X, Y1 + 1, Yf, [{X, Y1 + 1}|Accum]).
+column_next_point(X, Y1, Yf, Accum) when Y1 > Yf ->
+    column_next_point(X, Y1 - 1, Yf, [{X, Y1 - 1}|Accum]);
+column_next_point(X, Y1, Yf, Accum) when Y1 < Yf ->
+    column_next_point(X, Y1 + 1, Yf, [{X, Y1 + 1}|Accum]).
 
-column_next_point(_, _X, _X, [_H|T]) ->
+row_next_point(_, _X, _X, [_H|T]) ->
     lists:reverse(T);
-column_next_point(Y, X1, Xf, Accum) when X1 > Xf ->
-    column_next_point(Y, X1 - 1, Xf, [{X1 - 1, Y}|Accum]);
-column_next_point(Y, X1, Xf, Accum) when X1 < Xf ->
-    column_next_point(Y, X1 + 1, Xf, [{X1 + 1, Y}|Accum]).
+row_next_point(Y, X1, Xf, Accum) when X1 > Xf ->
+    row_next_point(Y, X1 - 1, Xf, [{X1 - 1, Y}|Accum]);
+row_next_point(Y, X1, Xf, Accum) when X1 < Xf ->
+    row_next_point(Y, X1 + 1, Xf, [{X1 + 1, Y}|Accum]).
 
 
 validate_diag_slope(1.0) ->
@@ -81,6 +82,38 @@ diag_next_point(M, B, {X1, _Y}, {Xf, Yf}, Accum) when Xf > X1 ->
     NewX = X1 + 1,
     Loc = { NewX, M * NewX + B },
     diag_next_point(M, B, Loc, {Xf, Yf}, [Loc|Accum]).
+
+np_diag1_test() ->
+    [ { 3, 4 } ] = next_point( { 4, 5 }, { 2, 3 } ).
+np_diag2_test() ->
+    [ { 3, 4 }, { 2, 5 } ] = next_point( { 4, 3 }, { 1, 6 } ).
+np_col1_test() ->
+    [] = next_point( { 0, 0 }, { 0, -1 } ).
+np_col2_test() ->
+    [ {-3, -6 } ] = next_point( { -3, -7 }, { -3, -5 } ).
+np_row1_test() ->
+    [ { 1, 5 }, { 2, 5 }, { 3, 5 } ] = next_point( { 0, 5 }, { 4, 5 } ).
+
+row_1_test() ->
+    [ { -42, 15 }, { -41, 15 } ] = row_next_point(15, -43, -40, []).
+row_2_test() ->
+    [] = row_next_point(3, 4, 3, []).
+
+col_1_test() ->
+    [ { 8, 1 }, { 8, 2 }, { 8, 3 } ] = column_next_point(8, 0, 4, []).
+
+slope_1_test() ->
+    infinity = calculate_slope( { 3, 5 }, { 3, -14 } ).
+slope_2_test() ->
+    none = calculate_slope( { 3, 5 }, { 3, 5 } ).
+slope_3_test() ->
+    0.0 = calculate_slope( { 3, 5 }, { 99, 5 } ).
+slope_4_test() ->
+    -1.0 = calculate_slope( { 3, 5 }, { 8, 0 } ).
+slope_5_test() ->
+    1.0 = calculate_slope( { 3, 5 }, { -2, 0 } ).
+
+
 
 movefuns() ->
     [ 
@@ -151,3 +184,51 @@ movefuns() ->
       }
 
     ].
+
+queen_nomove_test() ->
+    [ Q ] = [ X || {queenmove, X} <- movefuns() ],
+    { {3, 3}, [] } = Q( {3, 3}, {5, 6}, white ).
+
+queen_diag_test() ->
+    [ Q ] = [ X || {queenmove, X} <- movefuns() ],
+    { {6, 42}, [ { 8, 40 }, { 7, 41 } ] } = Q( { 9, 39 }, { 6, 42 }, black ).
+
+queen_col_test() ->
+    [ Q ] = [ X || {queenmove, X} <- movefuns() ],
+    { {6, 42}, [ { 6, 40 }, { 6, 41 } ] } = Q( { 6, 39 }, { 6, 42 }, black ).
+
+rook_col_test() ->
+    [ R ] = [ X || {rookmove, X} <- movefuns() ],
+    { {2, 35}, [ { 2, 36 } ] } = R( { 2, 37 }, { 2, 35 }, black ).
+
+rook_row_test() ->
+    [ R ] = [ X || {rookmove, X} <- movefuns() ],
+    { {2, 35}, [ { 3, 35 } ] } = R( { 4, 35 }, { 2, 35 }, black ).
+
+pawn_nocap_test() ->
+    [ Pc ] = [ X || {pawncap, X} <- movefuns() ],
+    { {3, 4}, [] } = Pc({3, 4}, {3, 5}, white).
+
+pawn_cap1_test() ->
+    [ Pc ] = [ X || {pawncap, X} <- movefuns() ],
+    { {4, 5}, [] } = Pc({3, 4}, {4, 5}, white).
+
+pawn_cap2_test() ->
+    [ Pc ] = [ X || {pawncap, X} <- movefuns() ],
+    { {4, 5}, [] } = Pc({5, 6}, {4, 5}, black).
+
+pawn_move1_test() ->
+    [ Pm ] = [ X || {pawnmove, X} <- movefuns() ],
+    { {4, 4}, [{4, 3}] } = Pm({4, 2}, {4, 4}, white).
+
+pawn_move2_test() ->
+    [ Pm ] = [ X || {pawnmove, X} <- movefuns() ],
+    { {4, 2}, [] } = Pm({4, 2}, {4, 4}, black).
+
+pawn_move3_test() ->
+    [ Pm ] = [ X || {pawnmove, X} <- movefuns() ],
+    { {4, 4}, [] } = Pm({4, 3}, {4, 4}, white).
+
+pawn_move4_test() ->
+    [ Pm ] = [ X || {pawnmove, X} <- movefuns() ],
+    { {4, 4}, [] } = Pm({4, 5}, {4, 4}, black).
