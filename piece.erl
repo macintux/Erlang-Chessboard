@@ -11,22 +11,26 @@
 
 piece_loop(Piece, Move, Capture) ->
     receive
-        { Pid, move, Start, End, Team } ->
-            move_response(Pid, Piece, Start, End, Move(Start, End, Team)),
+        { Pid, move, Start, End, Team, Xtra } ->
+            move_response(Pid, Piece, Start, End, Move(Start, End, Team), Xtra),
             piece_loop(Piece, Move, Capture);
-        { Pid, capture, Start, End, Team } ->
-            move_response(Pid, Piece, Start, End, Capture(Start, End, Team)),
+        { Pid, capture, Start, End, Team, Xtra } ->
+            move_response(Pid, Piece, Start, End, Capture(Start, End, Team), Xtra),
             piece_loop(Piece, Move, Capture);
+        { swap, NewPiece, NewMove, NewCapture } ->
+            piece_loop(NewPiece, NewMove, NewCapture);
+        { Pid, what_am_i, Xtra } ->
+            Pid ! { Piece, Xtra };
         done ->
             done;
         Message ->
             throw({unknown_message, Message})
     end.
 
-move_response(Pid, Piece, Start, End, { Start, Traverse }) ->
-    Pid ! { no, Piece, Start, End, Traverse };
-move_response(Pid, Piece, Start, End, { End, Traverse }) ->
-    Pid ! { yes, Piece, Start, End, Traverse }.
+move_response(Pid, Piece, Start, End, { Start, Traverse }, Xtra) ->
+    Pid ! { no, Piece, Start, End, Traverse, Xtra };
+move_response(Pid, Piece, Start, End, { End, Traverse }, Xtra) ->
+    Pid ! { yes, Piece, Start, End, Traverse, Xtra }.
 
 calculate_slope(Loc, Loc) ->
     none;
