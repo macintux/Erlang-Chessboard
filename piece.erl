@@ -9,18 +9,27 @@
 -include_lib("eunit/include/eunit.hrl").
 -compile(export_all).
 
-piece_loop(Piece, Move, Capture) ->
+blank_square() ->
+    piece_loop(blank_square, none, [],
+               fun(Source, _Dest, _team) -> { Source, [] } end,
+               fun(Source, _Dest, _team) -> { Source, [] } end).
+
+piece_loop(Piece, Team, History, Move, Capture) ->
     receive
-        { Pid, move, Start, End, Team, Xtra } ->
+        { Pid, testmove, Start, End, Xtra } ->
             move_response(Pid, Piece, Start, End, Move(Start, End, Team), Xtra),
-            piece_loop(Piece, Move, Capture);
-        { Pid, capture, Start, End, Team, Xtra } ->
+            piece_loop(Piece, Team, History, Move, Capture);
+        { Pid, testcapture, Start, End, Xtra } ->
             move_response(Pid, Piece, Start, End, Capture(Start, End, Team), Xtra),
-            piece_loop(Piece, Move, Capture);
-        { swap, NewPiece, NewMove, NewCapture } ->
-            piece_loop(NewPiece, NewMove, NewCapture);
+            piece_loop(Piece, Team, History, Move, Capture);
+        { replace, NewPiece, NewTeam, NewHistory, NewMove, NewCapture } ->
+            piece_loop(NewPiece, NewTeam, NewHistory, NewMove, NewCapture);
+        { moveto, Start, End, CapturedPiece, NewSquarePid } ->
+            NewSquarePid ! { replace, Piece, Team,
+                             [ { Start, End, CapturedPiece } | History ], Move, Capture },
+            blank_square();
         { Pid, what_am_i, Xtra } ->
-            Pid ! { Piece, Xtra };
+            Pid ! { Piece, Team, History, Xtra };
         done ->
             done;
         Message ->
