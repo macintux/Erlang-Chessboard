@@ -16,18 +16,47 @@ blank_square() ->
 
 piece_loop(Piece, Team, History, Move, Capture) ->
     receive
-        { Pid, testmove, Start, End, Xtra } ->
-            move_response(Pid, Piece, Start, End, Move(Start, End, Team), Xtra),
+        { Pid, testmove, Start, End, Context, Xtra } ->
+            move_response(Pid, Piece, Start, End, Move(Start, End, Context), Xtra),
             piece_loop(Piece, Team, History, Move, Capture);
-        { Pid, testcapture, Start, End, Xtra } ->
-            move_response(Pid, Piece, Start, End, Capture(Start, End, Team), Xtra),
+        { Pid, testcapture, Start, End, Context, Xtra } ->
+            move_response(Pid, Piece, Start, End, Capture(Start, End, Context), Xtra),
             piece_loop(Piece, Team, History, Move, Capture);
         { replace, NewPiece, NewTeam, NewHistory, NewMove, NewCapture } ->
             piece_loop(NewPiece, NewTeam, NewHistory, NewMove, NewCapture);
-        { moveto, Start, End, CapturedPiece, NewSquarePid } ->
-            NewSquarePid ! { replace, Piece, Team,
-                             [ { Start, End, CapturedPiece } | History ], Move, Capture },
+
+        { moveto, Start, End, Context, NewSquarePid } ->
+            %% Ask the target square for more information
+            NewSquarePid ! { self(), what_am_i, none },
+            receive
+                %% If we're moving to a blank square, verify Move() before
+                %% transferring
+                { blank_square, _Team, _History, none } ->
+                    case Move(Start, End, Context) of
+                        { Start, _ } ->
+                            throw({cannot_moveto, Piece, Start, End});
+                        { End, _ } ->
+                            NewSquarePid ! { replace, Piece, Team,
+                                             [ { Start, End, none } | History ], Move, Capture }
+                    end;
+
+                %% If we're trying to capture the same team color, throw an exception
+                { CapturedPiece, Team, _, _ } ->
+                    throw({capturing_same_team, Piece, CapturedPiece, Start, End});
+
+                %% Successful capture
+                { CapturedPiece, _Team, _, _ } ->
+                    case Capture(Start, End, Context) of
+                        { Start, _ } ->
+                            throw({cannot_moveto, Piece, Start, End});
+                        { End, _ } ->
+                            NewSquarePid ! { replace, Piece, Team,
+                                             [ { Start, End, CapturedPiece } | History ], Move, Capture }
+                    end
+            end,
+            %% Now we've lost our piece, so reinitialize as a blank square
             blank_square();
+
         { Pid, what_am_i, Xtra } ->
             Pid ! { Piece, Team, History, Xtra },
             piece_loop(Piece, Team, History, Move, Capture);
@@ -145,7 +174,11 @@ movefuns() ->
                     (Loc, _, _) -> { Loc, [] } end
       },
 
-      { kingmove, fun({ OldX, OldY }, { NewX, NewY }, _)
+      { kingmove, fun({ 5, 1 }, { NewX, 1 }, {white, castle})
+                        when abs(NewX - 5) =:= 2 -> { { NewX, 1 }, [] };
+                     ({ 5, 8 }, { NewX, 8 }, {black, castle})
+                        when abs(NewX - 5) =:= 2 -> { { NewX, 8 }, [] };
+                     ({ OldX, OldY }, { NewX, NewY }, _)
                         when abs(NewY - OldY) < 2, abs(NewX - OldX) < 2 -> { { NewX, NewY }, [] };
                      (Loc, _, _) -> { Loc, [] } end
       },
