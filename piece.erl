@@ -29,7 +29,8 @@ piece_loop(Piece, Team, History, Move, Capture) ->
                              [ { Start, End, CapturedPiece } | History ], Move, Capture },
             blank_square();
         { Pid, what_am_i, Xtra } ->
-            Pid ! { Piece, Team, History, Xtra };
+            Pid ! { Piece, Team, History, Xtra },
+            piece_loop(Piece, Team, History, Move, Capture);
         done ->
             done;
         Message ->
