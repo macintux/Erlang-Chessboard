@@ -22,8 +22,8 @@ mkmatrix(NR, NC) -> mkmatrix(NR, NC, []).
 
 board_loop(Matrix) ->
     receive
-        { Pid, move, {X, Y}, End } ->
-            element(X, element(Y, Matrix)) ! { self(), move, {X, Y}, End, Pid },
+        { Pid, testmove, {X, Y}, End } ->
+            element(X, element(Y, Matrix)) ! { self(), testmove, {X, Y}, End, Pid },
             board_loop(Matrix);
         { Response, Piece, _Start, _End, _Traverse, Pid } ->
             Pid ! { Response, Piece },

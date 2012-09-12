@@ -16,23 +16,36 @@ blank_square() ->
 
 piece_loop(Piece, Team, History, Move, Capture) ->
     receive
-        { Pid, testmove, Start, End, Context, Xtra } ->
-            move_response(Pid, Piece, Start, End, Move(Start, End, Context), Xtra),
+        { Pid, testmove, Start, End, Xtra } ->
+            move_response(Pid, Piece, Start, End, Move(Start, End, Team), Xtra),
             piece_loop(Piece, Team, History, Move, Capture);
-        { Pid, testcapture, Start, End, Context, Xtra } ->
-            move_response(Pid, Piece, Start, End, Capture(Start, End, Context), Xtra),
+        { Pid, testcastle, Start, End, Xtra } ->
+            move_response(Pid, Piece, Start, End, Move(Start, End, {Team, castle}), Xtra),
+            piece_loop(Piece, Team, History, Move, Capture);
+        { Pid, testcapture, Start, End, Xtra } ->
+            move_response(Pid, Piece, Start, End, Capture(Start, End, Team), Xtra),
             piece_loop(Piece, Team, History, Move, Capture);
         { replace, NewPiece, NewTeam, NewHistory, NewMove, NewCapture } ->
             piece_loop(NewPiece, NewTeam, NewHistory, NewMove, NewCapture);
 
-        { moveto, Start, End, Context, NewSquarePid } ->
+        { castleto, Start, End, NewSquarePid } ->
+            %% Ask the target square for more information
+            case Move(Start, End, { Team, castle }) of
+                { Start, _ } ->
+                    throw({cannot_moveto, Piece, Start, End});
+                { End, _ } ->
+                    NewSquarePid ! { replace, Piece, Team,
+                                     [ { Start, End, none } | History ], Move, Capture }
+            end;
+
+        { moveto, Start, End, NewSquarePid } ->
             %% Ask the target square for more information
             NewSquarePid ! { self(), what_am_i, none },
             receive
                 %% If we're moving to a blank square, verify Move() before
                 %% transferring
                 { blank_square, _Team, _History, none } ->
-                    case Move(Start, End, Context) of
+                    case Move(Start, End, Team) of
                         { Start, _ } ->
                             throw({cannot_moveto, Piece, Start, End});
                         { End, _ } ->
@@ -46,7 +59,7 @@ piece_loop(Piece, Team, History, Move, Capture) ->
 
                 %% Successful capture
                 { CapturedPiece, _Team, _, _ } ->
-                    case Capture(Start, End, Context) of
+                    case Capture(Start, End, Team) of
                         { Start, _ } ->
                             throw({cannot_moveto, Piece, Start, End});
                         { End, _ } ->
