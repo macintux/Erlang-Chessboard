@@ -14,17 +14,49 @@ blank_square() ->
                fun(Source, _Dest, _team) -> { Source, [] } end,
                fun(Source, _Dest, _team) -> { Source, [] } end).
 
+%% Any message that begins with 'if' means don't bother responding
+%% if you can't do it.
+
 piece_loop(Piece, Team, History, Move, Capture) ->
     receive
         { Pid, testmove, Start, End, Xtra } ->
-            move_response(Pid, Piece, Start, End, Move(Start, End, Team), Xtra),
+            move_response(Pid, Piece, Team, Start, End, Move(Start, End, Team), Xtra),
             piece_loop(Piece, Team, History, Move, Capture);
         { Pid, testcastle, Start, End, Xtra } ->
-            move_response(Pid, Piece, Start, End, Move(Start, End, {Team, castle}), Xtra),
+            move_response(Pid, Piece, Team, Start, End, Move(Start, End, {Team, castle}), Xtra),
             piece_loop(Piece, Team, History, Move, Capture);
         { Pid, testcapture, Start, End, Xtra } ->
-            move_response(Pid, Piece, Start, End, Capture(Start, End, Team), Xtra),
+            move_response(Pid, Piece, Team, Start, End, Capture(Start, End, Team), Xtra),
             piece_loop(Piece, Team, History, Move, Capture);
+        { Pid, ifcanattack, Start, End, Team, Xtra } ->
+            %% Only respond if I can capture a square and I'm on the specified team
+            case Capture(Start, End, Team) of
+                { End, Traverse } ->
+                    move_response(Pid, Piece, Team, Start, End, { End, Traverse }, Xtra);
+                true ->
+                    true
+            end,
+            piece_loop(Piece, Team, History, Move, Capture);
+        { Pid, iflineattack, Start, Target1, Target2, Team, Xtra } ->
+            %% Only respond if I can capture both target squares, I'm
+            %% on the specified team, and Target1 is traversed to reach Target2
+            case Capture(Start, Target2, Team) of
+                { Target2, Traverse } ->
+                    case lists:member(Target1, Traverse) of
+                        true ->
+                            move_response(Pid, Piece, Team, Start, Target2, { Target2, Traverse }, Xtra);
+                        false ->
+                            done
+                _ ->
+                    done
+            end,
+            piece_loop(Piece, Team, History, Move, Capture);
+
+        %% Board may ask all of us if we're a specific piece on a team (most likely, King)
+        { Pid, ifiam, Piece, Team, Loc, Xtra } ->
+            Pid ! { yesiam, Piece, Team, Loc, Xtra },
+            piece_loop(Piece, Team, History, Move, Capture);
+
         { replace, NewPiece, NewTeam, NewHistory, NewMove, NewCapture } ->
             piece_loop(NewPiece, NewTeam, NewHistory, NewMove, NewCapture);
 
@@ -79,10 +111,10 @@ piece_loop(Piece, Team, History, Move, Capture) ->
             throw({unknown_message, Message})
     end.
 
-move_response(Pid, Piece, Start, End, { Start, Traverse }, Xtra) ->
-    Pid ! { no, Piece, Start, End, Traverse, Xtra };
-move_response(Pid, Piece, Start, End, { End, Traverse }, Xtra) ->
-    Pid ! { yes, Piece, Start, End, Traverse, Xtra }.
+move_response(Pid, Piece, Team, Start, End, { Start, Traverse }, Xtra) ->
+    Pid ! { no, Piece, Team, Start, End, Traverse, Xtra };
+move_response(Pid, Piece, Team, Start, End, { End, Traverse }, Xtra) ->
+    Pid ! { yes, Piece, Team, Start, End, Traverse, Xtra }.
 
 calculate_slope(Loc, Loc) ->
     none;
