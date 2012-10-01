@@ -34,9 +34,130 @@ init() ->
                    ]
           }
         ],
-    Board = initialize(new(), RowSequence).
-%    MyState = #boardstate{pieces=Board},
-%    spawn(?MODULE, board_loop, [ MyState ]).
+    Board = initialize(new(), RowSequence),
+    MyState = #boardstate{pieces=Board},
+    spawn(?MODULE, board_loop, [ MyState ]).
+
+board_loop(MyState) ->
+    receive
+        { Pid, showboard } ->
+            io:format("~s~n", [matrix_to_text(MyState#boardstate.pieces)]),
+            Pid ! io_lib:format("~s~n", [matrix_to_text(MyState#boardstate.pieces)]),
+            board_loop(MyState);
+        { Pid, move, Start, End } ->
+            case evaluate_legal_move(MyState, move, Start, End) of
+                { true, Piece, undefined } ->
+                    %% Don't forget to update history on the piece
+                    NewDict =
+                        store(Start, #piece{type=none},
+                              store(End, Piece, MyState#boardstate.pieces)
+                             ),
+                    %% Must also update whiteking/blackking if one of them moves
+                    NewState = #boardstate{ whiteking=MyState#boardstate.whiteking,
+                                            blackking=MyState#boardstate.blackking,
+                                            pieces=NewDict },
+                    IsCheckOrMate = check_or_mate(NewState),
+                    Pid ! { move, true, IsCheckOrMate },
+                    case IsCheckOrMate of
+                        { checkmate, WhoWins } ->
+                            io:format("~s~n", [matrix_to_text(NewState#boardstate.pieces)]),
+                            exit(WhoWins);
+                        _ ->
+                            board_loop(NewState)
+                    end;
+                { false, Reason } ->
+                    Pid ! { false, Reason },
+                    board_loop(MyState)
+            end;
+        { Pid, examine, Square} ->
+            { ok, Piece } = find(Square, MyState#boardstate.pieces),
+            Pid ! Piece,
+            board_loop(MyState)
+    end.
+
+%% XXX populate later
+check_or_mate(_State) ->
+    none.
+
+find_obstacle(_Pieces, []) ->
+    false;
+find_obstacle(Pieces, [H|T]) ->
+    case find(H, Pieces) of
+        { ok, #piece{type=none} } ->
+            find_obstacle(Pieces, T);
+        { ok, Piece } ->
+            { true, H, Piece }
+    end.
+
+%% Castling will be a whole different matter.  False for now
+evaluate_legal_move(_State, castle, _Start, _End) ->
+    { false, "Castling not yet supported" };
+evaluate_legal_move(State, MoveType, Start, End) ->
+    { ok, Piece } = find(Start, State#boardstate.pieces),
+    { CanMove, Traverse } =
+        newpiece:testmove(#move{
+                             piece=Piece,
+                             start=Start,
+                             target=End,
+                             movetype=MoveType
+                            }),
+    case MoveType of
+        move ->
+            %% Must make sure no piece at end as well as nothing in the path
+            evaluate_legal_aux(CanMove, move, [ End | Traverse], Start, End, Piece, State);
+        capture ->
+            %% Make sure there is a piece at the target before wasting our time
+            case find(End, State#boardstate.pieces) of
+                { ok, #piece{type=none} } ->
+                    { false, io_lib:format("No piece at ~p to capture", [End]) };
+                _ ->
+                    evaluate_legal_aux(CanMove, capture, Traverse, Start, End, Piece, State)
+            end
+    end.
+
+%% First, illegal moves
+evaluate_legal_aux(false, _, _, _, _, Piece, _) ->
+    { false, io_lib:format("Illegal move for ~s", [Piece#piece.type]) };
+%% No piece in the way, check for pins
+evaluate_legal_aux(true, move, [], Start, _End, Piece, State) ->
+    case look_for_pins(Start, Piece#piece.team,
+                       State#boardstate.whiteking, State#boardstate.blackking) of
+        { true, PinningPiece, Where } ->
+            { false, io_lib:format("Piece pinned by ~s at ~p",
+                                   [PinningPiece#piece.type,
+                                    Where]) };
+        false ->
+            { true, Piece, undefined }
+    end;
+%% Attempted capture, no piece in the way
+evaluate_legal_aux(true, capture, [], Start, End, Piece, State) ->
+    case look_for_pins(Start, Piece#piece.team,
+                       State#boardstate.whiteking, State#boardstate.blackking) of
+        { true, PinningPiece, Where } ->
+            { false, io_lib:format("Piece pinned by ~s at ~p",
+                                   [PinningPiece#piece.type,
+                                    Where]) };
+        false ->
+            { ok, Captured } = find(End, State#boardstate.pieces),
+            { true, Piece, Captured }
+    end;
+%% Attempted move or capture, evaluate traversal squares for obstacles
+evaluate_legal_aux(true, MoveType, [H | T], Start, End, Piece, State) ->
+    case find(H, State#boardstate.pieces) of
+        { ok, #piece{type=none} } ->
+            evaluate_legal_aux(true, MoveType, T, Start, End, Piece, State);
+        { ok, #piece{type=Obstacle} } ->
+            { false, io_lib:format("Blocking piece (~s) at ~p", [Obstacle, End]) }
+    end.
+    
+
+%% XXX populate later
+look_for_pins(_Square, white, _WhiteKing, _BlackKing) ->
+    false;
+look_for_pins(_Square, black, _WhiteKing, _BlackKing) ->
+    false.
+
+
 
 matrix_to_text(Matrix) ->
     row_to_text(8, 1, Matrix, []).

@@ -10,124 +10,50 @@
 -include_lib("records.hrl").
 -compile(export_all).
 
-%% testmove(#move{
-%%             piece=#piece{type=Piece,team=Team,movefun=Move,capturefun=Cap},
-%%             start=Start,
-%%             target=End,
-%%             movetype=move}) ->
-%%     move_response(Piece, Team, Start, End, Move(Start, End, Team));
-%% testmove(#move{
-%%             piece=#piece{type=Piece,team=Team,movefun=Move,capturefun=Cap},
-%%             start=Start,
-%%             target=End,
-%%             movetype=capture}) ->
-%%     move_response(Piece, Team, Start, End, Cap(Start, End, Team));
-%% testmove(#move{
-%%             piece=#piece{type=Piece,team=Team,movefun=Move,capturefun=Cap},
-%%             start=Start,
-%%             target=End,
-%%             movetype=castle}) ->
-%%     move_response(Piece, Team, Start, End, Move(Start, End, {Team, castle})).
+testmove(#move{
+            piece=#piece{team=Team,movefun=Move},
+            start=Start,
+            target=End,
+            movetype=move}) ->
+    move_response(Start, End, Move(Start, End, Team));
+testmove(#move{
+            piece=#piece{team=Team,capturefun=Cap},
+            start=Start,
+            target=End,
+            movetype=capture}) ->
+    move_response(Start, End, Cap(Start, End, Team));
+testmove(#move{
+            piece=#piece{team=Team,movefun=Move},
+            start=Start,
+            target=End,
+            movetype=castle}) ->
+    move_response(Start, End, Move(Start, End, {Team, castle})).
 
+%% Respond positively if I can attack the end square while traversing
+%% the intermediate square - in other words, if I can successfully pin
+%% a piece against its king
+testlineattack(#move{
+                  piece=#piece{team=Team,capturefun=Cap},
+                  start=Start,
+                  target=End,
+                  movetype=capture},
+               IntmdtSquare) ->
+    case Cap(Start, End, Team) of
+        { End, Traverse } ->
+            case lists:member(IntmdtSquare, Traverse) of
+                true ->
+                    move_response(Start, End, { End, Traverse });
+                false ->
+                    move_response(Start, End, { Start, [] })
+            end;
+        _ ->
+            move_response(Start, End, { Start, [] })
+    end.
 
-%% piece_loop(Piece, Team, History, Move, Capture) ->
-%%     receive
-%%         { Pid, testmove, Start, End, Xtra } ->
-%%             move_response(Pid, Piece, Team, Start, End, Move(Start, End, Team), Xtra),
-%%             piece_loop(Piece, Team, History, Move, Capture);
-%%         { Pid, testcastle, Start, End, Xtra } ->
-%%             move_response(Pid, Piece, Team, Start, End, Move(Start, End, {Team, castle}), Xtra),
-%%             piece_loop(Piece, Team, History, Move, Capture);
-%%         { Pid, testcapture, Start, End, Xtra } ->
-%%             move_response(Pid, Piece, Team, Start, End, Capture(Start, End, Team), Xtra),
-%%             piece_loop(Piece, Team, History, Move, Capture);
-%%         { Pid, ifcanattack, Start, End, Team, Xtra } ->
-%%             %% Only respond if I can capture a square and I'm on the specified team
-%%             case Capture(Start, End, Team) of
-%%                 { End, Traverse } ->
-%%                     move_response(Pid, Piece, Team, Start, End, { End, Traverse }, Xtra);
-%%                 true ->
-%%                     true
-%%             end,
-%%             piece_loop(Piece, Team, History, Move, Capture);
-%%         { Pid, iflineattack, Start, Target1, Target2, Team, Xtra } ->
-%%             %% Only respond if I can capture both target squares, I'm
-%%             %% on the specified team, and Target1 is traversed to reach Target2
-%%             case Capture(Start, Target2, Team) of
-%%                 { Target2, Traverse } ->
-%%                     case lists:member(Target1, Traverse) of
-%%                         true ->
-%%                             move_response(Pid, Piece, Team, Start, Target2, { Target2, Traverse }, Xtra);
-%%                         false ->
-%%                             done
-%%                 _ ->
-%%                     done
-%%             end,
-%%             piece_loop(Piece, Team, History, Move, Capture);
-
-%%         %% Board may ask all of us if we're a specific piece on a team (most likely, King)
-%%         { Pid, ifiam, Piece, Team, Loc, Xtra } ->
-%%             Pid ! { yesiam, Piece, Team, Loc, Xtra },
-%%             piece_loop(Piece, Team, History, Move, Capture);
-
-%%         { replace, NewPiece, NewTeam, NewHistory, NewMove, NewCapture } ->
-%%             piece_loop(NewPiece, NewTeam, NewHistory, NewMove, NewCapture);
-
-%%         { castleto, Start, End, NewSquarePid } ->
-%%             %% Ask the target square for more information
-%%             case Move(Start, End, { Team, castle }) of
-%%                 { Start, _ } ->
-%%                     throw({cannot_moveto, Piece, Start, End});
-%%                 { End, _ } ->
-%%                     NewSquarePid ! { replace, Piece, Team,
-%%                                      [ { Start, End, none } | History ], Move, Capture }
-%%             end;
-
-%%         { moveto, Start, End, NewSquarePid } ->
-%%             %% Ask the target square for more information
-%%             NewSquarePid ! { self(), what_am_i, none },
-%%             receive
-%%                 %% If we're moving to a blank square, verify Move() before
-%%                 %% transferring
-%%                 { blank_square, _Team, _History, none } ->
-%%                     case Move(Start, End, Team) of
-%%                         { Start, _ } ->
-%%                             throw({cannot_moveto, Piece, Start, End});
-%%                         { End, _ } ->
-%%                             NewSquarePid ! { replace, Piece, Team,
-%%                                              [ { Start, End, none } | History ], Move, Capture }
-%%                     end;
-
-%%                 %% If we're trying to capture the same team color, throw an exception
-%%                 { CapturedPiece, Team, _, _ } ->
-%%                     throw({capturing_same_team, Piece, CapturedPiece, Start, End});
-
-%%                 %% Successful capture
-%%                 { CapturedPiece, _Team, _, _ } ->
-%%                     case Capture(Start, End, Team) of
-%%                         { Start, _ } ->
-%%                             throw({cannot_moveto, Piece, Start, End});
-%%                         { End, _ } ->
-%%                             NewSquarePid ! { replace, Piece, Team,
-%%                                              [ { Start, End, CapturedPiece } | History ], Move, Capture }
-%%                     end
-%%             end,
-%%             %% Now we've lost our piece, so reinitialize as a blank square
-%%             blank_square();
-
-%%         { Pid, what_am_i, Xtra } ->
-%%             Pid ! { Piece, Team, History, Xtra },
-%%             piece_loop(Piece, Team, History, Move, Capture);
-%%         done ->
-%%             done;
-%%         Message ->
-%%             throw({unknown_message, Message})
-%%     end.
-
-%% move_response(Pid, Piece, Team, Start, End, { Start, Traverse }, Xtra) ->
-%%     Pid ! { no, Piece, Team, Start, End, Traverse, Xtra };
-%% move_response(Pid, Piece, Team, Start, End, { End, Traverse }, Xtra) ->
-%%     Pid ! { yes, Piece, Team, Start, End, Traverse, Xtra }.
+move_response(Start, _End, { Start, _Traverse }) ->
+    { false, [] };
+move_response(_Start, End, { End, Traverse }) ->
+    { true, Traverse }.
 
 calculate_slope(Loc, Loc) ->
     none;
