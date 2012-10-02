@@ -63,8 +63,9 @@ board_loop(MyState) ->
                             io:format("~s~n", [matrix_to_text(NewState#boardstate.pieces)]),
                             exit(WhoWins);
                         _ ->
-                            board_loop(NewState)
-                    end;
+                            nothing_to_do
+                    end,
+                    board_loop(NewState);
                 { false, Reason } ->
                     Pid ! { false, Reason },
                     board_loop(MyState)
@@ -78,16 +79,6 @@ board_loop(MyState) ->
 %% XXX populate later
 check_or_mate(_State) ->
     none.
-
-find_obstacle(_Pieces, []) ->
-    false;
-find_obstacle(Pieces, [H|T]) ->
-    case find(H, Pieces) of
-        { ok, #piece{type=none} } ->
-            find_obstacle(Pieces, T);
-        { ok, Piece } ->
-            { true, H, Piece }
-    end.
 
 %% Castling will be a whole different matter.  False for now
 evaluate_legal_move(_State, castle, _Start, _End) ->
@@ -104,7 +95,7 @@ evaluate_legal_move(State, MoveType, Start, End) ->
     case MoveType of
         move ->
             %% Must make sure no piece at end as well as nothing in the path
-            evaluate_legal_aux(CanMove, move, [ End | Traverse], Start, End, Piece, State);
+            evaluate_legal_aux(CanMove, move, Traverse ++ End, Start, End, Piece, State);
         capture ->
             %% Make sure there is a piece at the target before wasting our time
             case find(End, State#boardstate.pieces) of
@@ -147,7 +138,7 @@ evaluate_legal_aux(true, MoveType, [H | T], Start, End, Piece, State) ->
         { ok, #piece{type=none} } ->
             evaluate_legal_aux(true, MoveType, T, Start, End, Piece, State);
         { ok, #piece{type=Obstacle} } ->
-            { false, io_lib:format("Blocking piece (~s) at ~p", [Obstacle, End]) }
+            { false, io_lib:format("Blocking piece (~s) at ~p", [Obstacle, H]) }
     end.
     
 
