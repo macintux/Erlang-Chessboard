@@ -11,6 +11,11 @@
 -import(orddict, [ new/0, store/3, find/2 ]).
 -import(newpiece).
 
+-record(boardstate, { pieces, %% Compiler doesn't like :: orddict()
+                      whiteking={5, 1} :: square(),
+                      blackking={5, 8} :: square()}).
+-type boardstate() :: #boardstate{}.
+
 init() ->
     RowSequence =
         [ { pieces, [ { rook, rookmove, rookmove },
@@ -80,7 +85,14 @@ board_loop(MyState) ->
 check_or_mate(_State) ->
     none.
 
-%% Castling will be a whole different matter.  False for now
+%% If a move/capture would fail, returns { false, "reason" }
+%% If there is no piece at the square, today would error out, should fix that
+%% Castling is not yet supported
+%% If a capture would succeed, returns { true, MovePiece, CapturePiece }
+%% If a non-capture move would succeed, returns { true, MovePiece, undefined }
+-spec evaluate_legal_move(boardstate(), movetype(), square(), square()) ->
+                                 { 'true', piece(), piece()|'undefined' }|
+                                 { 'false', string() }.
 evaluate_legal_move(_State, castle, _Start, _End) ->
     { false, "Castling not yet supported" };
 evaluate_legal_move(State, MoveType, Start, End) ->
@@ -103,8 +115,15 @@ evaluate_legal_move(State, MoveType, Start, End) ->
                     { false, io_lib:format("No piece at ~p to capture", [End]) };
                 _ ->
                     evaluate_legal_aux(CanMove, capture, Traverse, Start, End, Piece, State)
-            end
+            end;
+        _ ->
+            { false, "Castle is not yet implemented" }
     end.
+
+-spec evaluate_legal_aux(boolean(), movetype(), list(square()),
+                         square(), square(), piece(), boardstate()) ->
+                                { 'true', piece(), piece()|'undefined' }|
+                                { 'false', string() }.
 
 %% First, illegal moves
 evaluate_legal_aux(false, _, _, _, _, Piece, _) ->
@@ -143,7 +162,10 @@ evaluate_legal_aux(true, MoveType, [H | T], Start, End, Piece, State) ->
     
 
 %% XXX populate later
-look_for_pins(_Square, white, _WhiteKing, _BlackKing) ->
+-spec look_for_pins(square(), side(), square(), square()) ->
+                           { 'true', piece(), square() } |
+                           'false'.
+look_for_pins(Square, white, _WhiteKing, _BlackKing) ->
     false;
 look_for_pins(_Square, black, _WhiteKing, _BlackKing) ->
     false.

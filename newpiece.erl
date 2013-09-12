@@ -10,6 +10,7 @@
 -include_lib("records.hrl").
 -compile(export_all).
 
+-spec testmove(move()) -> { boolean(), list(square()) }.
 testmove(#move{
             piece=#piece{team=Team,movefun=Move},
             start=Start,
@@ -141,7 +142,7 @@ slope_5_test() ->
     1.0 = calculate_slope( { 3, 5 }, { -2, 0 } ).
 
 
-
+-spec movefuns() -> list(movedef()).
 movefuns() ->
     [ 
       { pawnmove, fun({ X, OldY }, { X, NewY }, white) when NewY - OldY =:= 1 -> { { X, NewY }, [] };
@@ -175,7 +176,7 @@ movefuns() ->
       },
 
       { bishopmove, fun(Start, End, _) ->
-                            case piece:calculate_slope(Start, End) of
+                            case calculate_slope(Start, End) of
                                 1.0 ->
                                     { End, next_point(Start, End) };
                                 -1.0 ->
@@ -187,7 +188,7 @@ movefuns() ->
       },
 
       { rookmove, fun(Start, End, _) ->
-                          case piece:calculate_slope(Start, End) of
+                          case calculate_slope(Start, End) of
                               0.0 ->
                                   { End, next_point(Start, End) };
                               infinity ->
@@ -199,7 +200,7 @@ movefuns() ->
       },
 
       { queenmove, fun(Start, End, _) ->
-                            case piece:calculate_slope(Start, End) of
+                            case calculate_slope(Start, End) of
                                 1.0 ->
                                     { End, next_point(Start, End) };
                                 -1.0 ->
